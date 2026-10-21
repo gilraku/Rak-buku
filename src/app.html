@@ -309,6 +309,7 @@ label.f input, label.f select, label.f textarea { font-family: var(--f-body); fo
         <button type="button" class="btn" id="scanStop">Batal</button>
       </div>
       <p class="status-line" id="searchStatus"></p>
+      <button type="button" class="btn" id="photoBtn" hidden>Ambil atau pilih foto barcode</button>
       <div class="results-head" id="resHead" hidden><span id="resCount"></span><span id="resSource"></span></div>
       <div id="results" class="results"></div>
     </section>
@@ -988,7 +989,7 @@ const LANG = { ind: "ID", eng: "EN", jpn: "JA", may: "MS", msa: "MS", ger: "DE",
 function groupEditions(list) {
   const out = new Map();
   for (const b of list) {
-    const k = (b.title + "|" + (b.authors[0] || "")).toLowerCase().replace(/[^a-z0-9|]+/g, "");
+    const k = (b.title + "|" + (b.authors[0] || "")).normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}|]+/gu, "");
     const prev = out.get(k);
     if (prev) { prev.editions = (prev.editions || 1) + 1; if (!prev.cover && b.cover) prev.cover = b.cover; if (!prev.isbn && b.isbn) prev.isbn = b.isbn; }
     else out.set(k, { ...b, editions: b.editions || 1 });
@@ -1047,15 +1048,18 @@ let scanReader = null;
 function stopScan() { try { scanReader?.reset(); } catch {} scanReader = null; $("scanBox").hidden = true; }
 async function startScan() {
   $("searchStatus").textContent = ""; $("searchStatus").classList.remove("err");
+  $("photoBtn").hidden = true;
+  if (!navigator.mediaDevices?.getUserMedia) return $("scanFile").click(); // still inside the tap, so the picker opens
   try {
-    if (!navigator.mediaDevices?.getUserMedia) throw new Error("no camera");
     const ZX = await loadZxing();
     scanReader = new ZX.BrowserMultiFormatReader();
     $("scanBox").hidden = false;
     await scanReader.decodeFromConstraints({ video: { facingMode: "environment" } }, $("scanVideo"), (res) => { if (res) { stopScan(); onIsbn(res.getText()); } });
   } catch {
+    // The camera was refused after an async wait, so the tap no longer counts; let the user open the picker themselves.
     stopScan();
-    $("scanFile").click(); // camera not available here: take or pick a photo of the barcode instead
+    setSearchStatus("Kamera tidak bisa dipakai di sini. Foto barcode-nya saja.");
+    $("photoBtn").hidden = false;
   }
 }
 async function scanPhoto(file) {
@@ -1127,7 +1131,7 @@ let searchTimer = 0;
 async function runSearch(autoOpen) {
   const q = $("bq").value.trim();
   if (searchBy === "title" && /^(97[89])?\d{9}[\dXx]$/.test(q.replace(/[-\s]/g, ""))) setBy("isbn");
-  if (q.length < 2) { lastResults = []; lastSource = ""; renderResults(); setSearchStatus(""); return; }
+  if (q.length < 2) { searchSeq++; lastResults = []; lastSource = ""; renderResults(); setSearchStatus(""); return; }
   const seq = ++searchSeq;
   setSearchStatus(searchBy === "isbn" ? `Mencari ISBN ${q}…` : "Mencari…");
   try {
@@ -1184,6 +1188,7 @@ $("bq").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventD
 $("results").addEventListener("click", (e) => { const r = e.target.closest(".result"); if (r) showBook(lastResults[+r.dataset.i]); });
 $("scanBtn").onclick = startScan;
 $("scanStop").onclick = stopScan;
+$("photoBtn").onclick = () => { $("photoBtn").hidden = true; $("scanFile").click(); };
 $("scanFile").onchange = (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) scanPhoto(f); };
 $("manualBtn").onclick = () => {
   if (addMode === "manual") return setKind("buku", "search");
