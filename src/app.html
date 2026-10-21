@@ -1,0 +1,921 @@
+<title>Rak Buku</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Literata:opsz,wght@7..72,400;7..72,600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one-screen app. Top bar, then the bookcase (or list) filling the rest; a reading drawer slides in from the right (bottom sheet on phones). */
+:root {
+  --paper: #edf0ec;
+  --surface: #fbfcfa;
+  --ink: #18201c;
+  --muted: #5b6862;
+  --line: #d3dbd6;
+  --accent: #1d6b57;
+  --accent-ink: #ffffff;
+  --lamp: #e9a93a;
+  --scene: #dfe5e0;
+  --wood: #8b6b50;
+  --shadow: rgba(20, 30, 25, .16);
+  --ok: #2f7d4a;
+  --warn: #9a6a12;
+  --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Literata", Georgia, "Times New Roman", serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #111714; --surface: #19211d; --ink: #e5ebe7; --muted: #95a39c; --line: #2b3631;
+    --accent: #5fc4a3; --accent-ink: #0a1410; --lamp: #f0b54f; --scene: #0d1210; --wood: #5b4535;
+    --shadow: rgba(0, 0, 0, .5); --ok: #6cc98c; --warn: #e3b25a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #111714; --surface: #19211d; --ink: #e5ebe7; --muted: #95a39c; --line: #2b3631;
+  --accent: #5fc4a3; --accent-ink: #0a1410; --lamp: #f0b54f; --scene: #0d1210; --wood: #5b4535;
+  --shadow: rgba(0, 0, 0, .5); --ok: #6cc98c; --warn: #e3b25a; color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--paper); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.5; overflow: hidden; }
+* { box-sizing: border-box; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.app { height: 100%; display: flex; flex-direction: column; }
+.top {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+  padding-block: 12px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  border-bottom: 1px solid var(--line); background: var(--surface);
+}
+.brand { font-family: var(--f-display); font-weight: 700; font-size: 22px; letter-spacing: -.01em; display: flex; align-items: baseline; gap: 8px; }
+.brand small { font-family: var(--f-mono); font-size: 11px; font-weight: 400; color: var(--muted); letter-spacing: .04em; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 2px; background: var(--paper); }
+.seg button { border: 0; background: none; padding: 5px 14px; border-radius: 999px; font-family: var(--f-display); font-weight: 500; font-size: 14px; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.grow { flex: 1 1 160px; min-width: 0; display: flex; gap: 8px; }
+.search { flex: 1; min-width: 0; padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); }
+.sel { padding: 7px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); max-width: 40%; }
+.btn { border: 1px solid var(--line); background: var(--surface); padding: 7px 14px; border-radius: 8px; font-family: var(--f-display); font-weight: 500; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.ghost { background: none; }
+.btn.danger { color: #b3361f; }
+.btn:disabled { opacity: .5; cursor: default; }
+
+.stage { position: relative; flex: 1; min-height: 0; }
+#scene { position: absolute; inset: 0; background: var(--scene); }
+#scene canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+#scene canvas.hovering { cursor: pointer; }
+#labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.shelf-label {
+  position: absolute; transform: translate(0, -50%); white-space: nowrap;
+  font-family: var(--f-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 2px 7px;
+  box-shadow: 0 1px 3px var(--shadow);
+}
+.shelf-label b { color: var(--muted); font-weight: 400; margin-left: 6px; }
+.hint {
+  position: absolute; left: max(16px, env(safe-area-inset-left, 0px)); bottom: 12px; font-family: var(--f-mono); font-size: 11px; color: var(--muted);
+  background: color-mix(in srgb, var(--surface) 80%, transparent); padding: 4px 8px; border-radius: 6px;
+}
+.tip {
+  position: absolute; pointer-events: none; background: var(--ink); color: var(--paper); font-size: 13px;
+  padding: 4px 9px; border-radius: 6px; transform: translate(-50%, calc(-100% - 12px)); white-space: nowrap; max-width: 60vw; overflow: hidden; text-overflow: ellipsis;
+}
+.empty {
+  position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px;
+}
+.empty div { max-width: 34ch; display: grid; gap: 12px; justify-items: center; }
+.empty h2 { font-family: var(--f-display); margin: 0; font-size: 22px; text-wrap: balance; }
+.empty p { margin: 0; color: var(--muted); }
+
+/* list view */
+#list { position: absolute; inset: 0; overflow-y: auto; padding-block: 20px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.list-inner { max-width: 880px; margin: 0 auto; display: grid; gap: 28px; }
+.group h3 { font-family: var(--f-display); font-size: 17px; margin: 0 0 8px; display: flex; gap: 8px; align-items: baseline; }
+.group h3 span { font-family: var(--f-mono); font-size: 12px; font-weight: 400; color: var(--muted); }
+.rows { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.row {
+  width: 100%; display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 12px; align-items: center;
+  text-align: left; background: none; border: 0; border-top: 1px solid var(--line); padding: 10px 14px;
+}
+.row:first-child { border-top: 0; }
+.row:hover { background: var(--paper); }
+.swatch { width: 10px; height: 34px; border-radius: 2px; }
+.row-main { min-width: 0; }
+.row-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-sub { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.chip { font-family: var(--f-mono); font-size: 11px; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.chip.st-selesai { color: var(--ok); border-color: currentColor; }
+.chip.st-sedang { color: var(--warn); border-color: currentColor; }
+.chip.ai { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
+/* reading drawer */
+.drawer {
+  position: absolute; top: 0; right: 0; bottom: 0; width: min(440px, 100%);
+  background: var(--surface); border-left: 1px solid var(--line); box-shadow: -10px 0 30px var(--shadow);
+  display: flex; flex-direction: column; animation: slide .32s ease-out;
+}
+@keyframes slide { from { transform: translateX(24px); opacity: .4; } to { transform: none; opacity: 1; } }
+.drawer-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.drawer-body { overflow-y: auto; padding: 16px 16px 32px; padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 18px; }
+.drawer-body > * { flex-shrink: 0; }
+.drawer h2 { font-family: var(--f-display); font-size: 24px; line-height: 1.15; margin: 0; text-wrap: balance; }
+.meta { color: var(--muted); margin: 4px 0 0; }
+.fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+label.f { display: grid; gap: 4px; font-family: var(--f-mono); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+label.f input, label.f select, label.f textarea { font-family: var(--f-body); font-size: 15px; letter-spacing: 0; text-transform: none; color: var(--ink); padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); width: 100%; min-width: 0; }
+.x { border: 0; background: none; font-size: 22px; line-height: 1; padding: 4px 8px; color: var(--muted); }
+.link { color: var(--accent); word-break: break-all; }
+
+.cur { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.cur-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; background: var(--paper); border-bottom: 1px solid var(--line); }
+.cur-head strong { font-family: var(--f-display); }
+.tabs { display: flex; gap: 2px; padding: 8px 8px 0; flex-wrap: wrap; }
+.tabs button { border: 0; background: none; padding: 6px 10px; border-radius: 6px 6px 0 0; font-family: var(--f-display); font-size: 14px; color: var(--muted); border-bottom: 2px solid transparent; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabpane { padding: 12px 14px 16px; }
+.tabpane p { margin: 0; }
+.tabpane ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.terms { display: grid; gap: 10px; margin: 0; }
+.terms dt { font-weight: 600; }
+.terms dd { margin: 0; color: var(--muted); }
+.card {
+  perspective: 900px; height: 190px; border: 0; background: none; padding: 0; width: 100%;
+}
+.card-in { position: relative; width: 100%; height: 100%; transition: transform .5s; transform-style: preserve-3d; }
+.card.flipped .card-in { transform: rotateY(180deg); }
+.face { position: absolute; inset: 0; backface-visibility: hidden; border-radius: 10px; padding: 16px; display: grid; place-items: center; text-align: center; border: 1px solid var(--line); overflow-y: auto; }
+.face.front { background: var(--paper); font-weight: 600; }
+.face.back { background: var(--accent); color: var(--accent-ink); transform: rotateY(180deg); }
+.face small { position: absolute; top: 8px; left: 10px; font-family: var(--f-mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; opacity: .7; }
+.card-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+.source { display: grid; gap: 10px; padding: 12px 14px; }
+.source p { margin: 0; font-size: 14px; color: var(--muted); }
+.status-line { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+.status-line.err { color: #b3361f; }
+.confirm { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 14px; }
+
+/* add dialog */
+.modal { position: fixed; inset: 0; background: rgba(10, 16, 13, .45); display: grid; place-items: center; padding: 16px; z-index: 20; }
+.sheet { background: var(--surface); border-radius: 14px; width: min(520px, 100%); max-height: 100%; overflow-y: auto; padding: 18px; display: grid; gap: 14px; box-shadow: 0 20px 60px var(--shadow); }
+.sheet h2 { font-family: var(--f-display); margin: 0; font-size: 20px; }
+.sheet .actions { display: flex; justify-content: flex-end; gap: 8px; }
+.kinds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.kinds button { border: 1px solid var(--line); background: var(--paper); border-radius: 10px; padding: 10px 6px; display: grid; gap: 2px; text-align: center; font-family: var(--f-display); font-weight: 500; }
+.kinds button span { font-family: var(--f-body); font-size: 12px; color: var(--muted); font-weight: 400; }
+.kinds button[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+
+@media (max-width: 640px) {
+  .brand small { display: none; }
+  .drawer { top: auto; height: 72%; width: 100%; border-left: 0; border-top: 1px solid var(--line); border-radius: 16px 16px 0 0; animation-name: rise; }
+  @keyframes rise { from { transform: translateY(30px); opacity: .4; } to { transform: none; opacity: 1; } }
+  .fields { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .drawer, .card-in { animation: none; transition: none; }
+}
+</style>
+
+<div class="app">
+  <header class="top">
+    <div class="brand">Rak Buku <small id="modeNote">memuat…</small></div>
+    <div class="seg" role="group" aria-label="Tampilan">
+      <button id="vRak" aria-pressed="true">Rak 3D</button>
+      <button id="vList" aria-pressed="false">Daftar</button>
+    </div>
+    <div class="grow">
+      <input id="q" class="search" type="search" placeholder="Cari judul, penulis, rak…" aria-label="Cari">
+      <select id="fKind" class="sel" aria-label="Jenis">
+        <option value="">Semua jenis</option>
+        <option value="buku">Buku</option>
+        <option value="artikel">Artikel</option>
+        <option value="materi">Materi kuliah</option>
+      </select>
+    </div>
+    <button id="addBtn" class="btn primary">+ Tambah</button>
+  </header>
+
+  <main class="stage">
+    <div id="scene"></div>
+    <div id="labels"></div>
+    <div id="tip" class="tip" hidden></div>
+    <div id="hint" class="hint">Seret untuk geser · klik buku untuk menariknya</div>
+    <div id="empty" class="empty" hidden>
+      <div>
+        <h2>Rakmu masih kosong</h2>
+        <p>Tambahkan buku, artikel, atau PDF materi kuliah. Setiap rak berisi satu mata kuliah atau topik.</p>
+        <button class="btn primary" id="emptyAdd">Tambah item pertama</button>
+      </div>
+    </div>
+    <div id="list" hidden><div class="list-inner" id="listInner"></div></div>
+    <aside id="drawer" class="drawer" hidden aria-label="Detail item"></aside>
+  </main>
+</div>
+
+<div id="modal" class="modal" hidden>
+  <form class="sheet" id="addForm" autocomplete="off">
+    <h2>Tambah ke rak</h2>
+    <div class="kinds" role="group" aria-label="Jenis item">
+      <button type="button" data-kind="buku" aria-pressed="true">Buku<span>judul & penulis</span></button>
+      <button type="button" data-kind="artikel" aria-pressed="false">Artikel<span>tempel URL</span></button>
+      <button type="button" data-kind="materi" aria-pressed="false">Materi kuliah<span>unggah PDF</span></button>
+    </div>
+    <label class="f" id="urlField" hidden>URL artikel<input id="aUrl" type="url" placeholder="https://…"></label>
+    <label class="f" id="pdfField" hidden>File PDF<input id="aPdf" type="file" accept="application/pdf,.pdf"></label>
+    <label class="f">Judul<input id="aTitle" required placeholder="mis. Integral Lipat Dua, Pertemuan 5"></label>
+    <label class="f" id="authorField">Penulis / sumber<input id="aAuthor" placeholder="mis. James Stewart"></label>
+    <div class="fields">
+      <label class="f">Rak (mata kuliah / topik)<input id="aShelf" list="shelfList" required placeholder="mis. Kalkulus II"></label>
+      <label class="f">Status
+        <select id="aStatus">
+          <option value="mau">Mau dibaca</option>
+          <option value="sedang">Sedang dibaca</option>
+          <option value="selesai">Selesai</option>
+        </select>
+      </label>
+    </div>
+    <datalist id="shelfList"></datalist>
+    <p class="status-line" id="addStatus"></p>
+    <div class="actions">
+      <button type="button" class="btn ghost" id="addCancel">Batal</button>
+      <button type="submit" class="btn primary" id="addSubmit">Simpan</button>
+    </div>
+  </form>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+"use strict";
+
+// ---------- constants ----------
+const STATUS = { mau: "Mau dibaca", sedang: "Sedang dibaca", selesai: "Selesai" };
+const KIND = { buku: "Buku", artikel: "Artikel", materi: "Materi kuliah" };
+const SPINE_COLORS = ["#2d4f6c", "#7b2f2f", "#356b4b", "#b8862d", "#5a3d6e", "#1f5f63", "#a24f2c", "#3f4a57", "#8a6d3b", "#6b2b49", "#2f6f8f", "#4d5b2a"];
+const MAX_SOURCE_CHARS = 60000;
+const API_MODEL = "claude-sonnet-5-5";
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// Shown only when the app runs on its own (no shared database). Marked as examples.
+const EXAMPLES = [
+  { title: "Calculus: Early Transcendentals", author: "James Stewart", kind: "buku", shelf: "Kalkulus II", status: "sedang", contoh: true },
+  { title: "Pertemuan 5: Integral Lipat Dua", author: "Slide dosen", kind: "materi", shelf: "Kalkulus II", status: "selesai", contoh: true, pdfName: "kalkulus2-p5.pdf",
+    curation: {
+      ringkasan: "Integral lipat dua menghitung volume di bawah permukaan z = f(x, y) di atas suatu daerah D pada bidang xy. Untuk daerah persegi panjang, Teorema Fubini membolehkan kita menghitungnya sebagai dua integral biasa berturut-turut. Untuk daerah umum, batas integral dalam bergantung pada variabel luar. Urutan integrasi bisa ditukar asal batasnya ditulis ulang dengan benar.",
+      poin: ["∬_D f(x,y) dA = volume di bawah f di atas D bila f ≥ 0.", "Teorema Fubini: pada persegi panjang [a,b]×[c,d], urutan dx dy dan dy dx memberi hasil sama.", "Daerah tipe I: a ≤ x ≤ b, g₁(x) ≤ y ≤ g₂(x). Integralkan y dulu.", "Daerah tipe II: c ≤ y ≤ d, h₁(y) ≤ x ≤ h₂(y). Integralkan x dulu.", "Menukar urutan integrasi sering membuat integral yang sulit menjadi mudah.", "∬_D 1 dA sama dengan luas daerah D."],
+      istilah: [{ istilah: "Daerah tipe I", arti: "Daerah yang dibatasi dua kurva y = g₁(x) dan y = g₂(x) di antara x = a dan x = b." }, { istilah: "Teorema Fubini", arti: "Integral lipat dua pada persegi panjang dapat dihitung sebagai integral berulang dalam urutan mana pun." }, { istilah: "Integral berulang", arti: "Integral di dalam integral, dikerjakan dari yang paling dalam." }],
+      kartu: [{ tanya: "Apa arti geometris ∬_D f(x,y) dA bila f ≥ 0?", jawab: "Volume benda di bawah permukaan z = f(x,y) dan di atas daerah D." }, { tanya: "Kapan urutan integrasi boleh ditukar tanpa mengubah batas?", jawab: "Saat daerahnya persegi panjang dan f kontinu (Teorema Fubini)." }, { tanya: "Bagaimana menghitung luas D dengan integral lipat dua?", jawab: "Integralkan fungsi 1: Luas(D) = ∬_D 1 dA." }, { tanya: "Pada daerah tipe I, variabel mana yang diintegralkan lebih dulu?", jawab: "y, karena batasnya berupa fungsi dari x." }],
+      dibuat: "2026-10-21T09:00:00Z"
+    } },
+  { title: "Introduction to Algorithms", author: "Cormen, Leiserson, Rivest, Stein", kind: "buku", shelf: "Struktur Data", status: "sedang", contoh: true },
+  { title: "Binary Heap (VisuAlgo)", author: "visualgo.net", kind: "artikel", url: "https://visualgo.net/en/heap", shelf: "Struktur Data", status: "mau", contoh: true },
+  { title: "Laut Bercerita", author: "Leila S. Chudori", kind: "buku", shelf: "Bacaan santai", status: "selesai", contoh: true },
+  { title: "Bumi Manusia", author: "Pramoedya Ananta Toer", kind: "buku", shelf: "Bacaan santai", status: "selesai", contoh: true },
+  { title: "Atomic Habits", author: "James Clear", kind: "buku", shelf: "Bacaan santai", status: "sedang", contoh: true },
+];
+
+// ---------- helpers ----------
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+function hash(s) { let h = 2166136261; for (const c of String(s)) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+function colorFor(item) { return item.color || SPINE_COLORS[hash(item.title + item.shelf) % SPINE_COLORS.length]; }
+function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function lsGet(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } }
+function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+function newId() { return "i" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function byShelf(items) {
+  const map = new Map();
+  for (const it of items) { const k = it.shelf || "Tanpa rak"; if (!map.has(k)) map.set(k, []); map.get(k).push(it); }
+  for (const arr of map.values()) arr.sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
+  return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0], "id"));
+}
+
+// ---------- state ----------
+const S = { items: [], q: "", kind: "", view: lsGet("rakbuku.view", "rak"), selected: null, tab: "ringkasan", card: 0, flipped: false, busy: null, confirmDelete: false };
+
+// ---------- storage: shared database when the viewer provides one, else this browser ----------
+const store = {
+  mode: "local", db: null,
+  async init(onChange) {
+    const claude = window.claude;
+    const db = claude?.use ? await claude.use("db").catch(() => null) : null;
+    if (db) {
+      this.mode = "db"; this.db = db;
+      db.collection("items").onSnapshot((snap) => onChange(snap.docs.map((d) => ({ ...d.data(), id: d.id }))), (e) => setNote("gagal memuat: " + (e?.message || e)));
+      return;
+    }
+    let items = lsGet("rakbuku.items", null);
+    if (!items) { const t = Date.now(); items = EXAMPLES.map((e, i) => ({ ...e, id: newId() + i, createdAt: new Date(t + i).toISOString() })); lsSet("rakbuku.items", items); }
+    this.local = items; onChange(items.slice());
+    this.onChange = onChange;
+  },
+  async add(data) {
+    data = { ...data, createdAt: new Date().toISOString() };
+    if (this.mode === "db") { const ref = await this.db.collection("items").add(data); return ref.id; }
+    const id = newId(); this.local.push({ ...data, id }); this.saveLocal(); return id;
+  },
+  async update(id, patch) {
+    if (this.mode === "db") return this.db.collection("items").doc(id).update(patch);
+    const it = this.local.find((x) => x.id === id); if (it) Object.assign(it, patch); this.saveLocal();
+  },
+  async remove(id) {
+    if (this.mode === "db") return this.db.collection("items").doc(id).delete();
+    this.local = this.local.filter((x) => x.id !== id); this.saveLocal();
+  },
+  saveLocal() { lsSet("rakbuku.items", this.local); this.onChange(this.local.map((x) => ({ ...x }))); },
+};
+
+// ---------- AI: Claude via the viewer when available, else the Claude API with the user's own key ----------
+const ai = {
+  sample: null,
+  async init() { this.sample = window.claude?.use ? await window.claude.use("sample").catch(() => null) : null; },
+  get ready() { return !!this.sample || !!lsGet("rakbuku.apikey", ""); },
+  async curate(item, text) {
+    const prompt = `Kamu membantu seorang mahasiswa memahami bacaannya lebih cepat. Baca teks di bawah ini lalu kurasi dalam Bahasa Indonesia yang sederhana dan jelas.
+
+Balas HANYA dengan satu objek JSON berbentuk:
+{"ringkasan": "3-5 kalimat inti materi",
+ "poin": ["5-8 poin kunci, masing-masing satu kalimat"],
+ "istilah": [{"istilah": "nama konsep", "arti": "penjelasan satu kalimat"}],
+ "kartu": [{"tanya": "pertanyaan yang menguji pemahaman", "jawab": "jawaban singkat"}]}
+Buat 3-8 istilah dan 6-10 kartu. Kartu harus menguji pemahaman konsep, bukan hafalan angka halaman. Jika teks berbahasa Inggris, tetap jawab dalam Bahasa Indonesia tetapi pertahankan istilah teknis aslinya dalam kurung.
+
+Judul: ${item.title}
+Jenis: ${KIND[item.kind]}
+Rak: ${item.shelf}
+
+<teks>
+${text}
+</teks>`;
+    let out;
+    if (this.sample) {
+      out = await this.sample.json(prompt, { modelTier: "default" });
+    } else {
+      const key = lsGet("rakbuku.apikey", "");
+      if (!key) throw new Error("Masukkan kunci API Claude dulu.");
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+        body: JSON.stringify({ model: API_MODEL, max_tokens: 4000, messages: [{ role: "user", content: prompt }] }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error?.message || "Permintaan ke Claude gagal (" + res.status + ").");
+      const txt = (body.content || []).filter((c) => c.type === "text").map((c) => c.text).join("");
+      const a = txt.indexOf("{"), b = txt.lastIndexOf("}");
+      out = JSON.parse(txt.slice(a, b + 1));
+    }
+    if (!out || typeof out.ringkasan !== "string") throw new Error("Jawaban Claude tidak berbentuk yang diharapkan. Coba lagi.");
+    return {
+      ringkasan: out.ringkasan,
+      poin: Array.isArray(out.poin) ? out.poin.map(String) : [],
+      istilah: Array.isArray(out.istilah) ? out.istilah.filter((x) => x && x.istilah) : [],
+      kartu: Array.isArray(out.kartu) ? out.kartu.filter((x) => x && x.tanya) : [],
+      dibuat: new Date().toISOString(),
+    };
+  },
+};
+
+// ---------- PDF text extraction (pdf.js loaded on first use) ----------
+function loadScript(src) { return new Promise((ok, fail) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => fail(new Error("Gagal memuat " + src)); document.head.appendChild(s); }); }
+let pdfReady = null;
+function loadPdfJs() {
+  // Loading the worker as a plain script lets pdf.js run on the main thread, which works inside sandboxed frames too.
+  pdfReady ||= (async () => {
+    const base = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
+    await loadScript(base + "pdf.min.js");
+    await loadScript(base + "pdf.worker.min.js");
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = base + "pdf.worker.min.js";
+    return window.pdfjsLib;
+  })();
+  return pdfReady;
+}
+async function pdfToText(file, onProgress) {
+  const lib = await loadPdfJs();
+  const doc = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  let text = "";
+  for (let p = 1; p <= doc.numPages && text.length < MAX_SOURCE_CHARS; p++) {
+    onProgress?.(p, doc.numPages);
+    const page = await doc.getPage(p);
+    const tc = await page.getTextContent();
+    text += `\n[hal. ${p}]\n` + tc.items.map((i) => i.str).join(" ");
+  }
+  text = text.replace(/[ \t]+/g, " ").trim().slice(0, MAX_SOURCE_CHARS);
+  if (text.length < 40) throw new Error("PDF ini tidak berisi teks yang bisa dibaca (mungkin hasil scan). Tempel teksnya secara manual.");
+  return { text, pages: doc.numPages };
+}
+
+// =====================================================================
+// 3D bookcase
+// =====================================================================
+const scene3 = (() => {
+  const host = $("scene");
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  host.appendChild(renderer.domElement);
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x554433, 0.75));
+  const lamp = new THREE.DirectionalLight(0xffe2b0, 0.85); lamp.position.set(-4, 6, 8); scene.add(lamp);
+  const fill = new THREE.DirectionalLight(0xbfd8ff, 0.25); fill.position.set(6, -2, 6); scene.add(fill);
+
+  let caseGroup = null, books = [], rows = [], bounds = { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+  const cam = { x: 0, y: 0, z: 9, tx: 0, ty: 0 };
+  let hovered = null, pulled = null;
+
+  function applyTheme() {
+    scene.background = new THREE.Color(cssVar("--scene") || "#dfe5e0");
+    if (caseGroup) caseGroup.traverse((o) => { if (o.userData.wood) o.material.color.set(cssVar("--wood") || "#8b6b50"); });
+  }
+
+  function spineTexture(item, w, h) {
+    const c = document.createElement("canvas"); c.width = Math.max(48, Math.round(w * 220)); c.height = Math.round(h * 220);
+    const g = c.getContext("2d"); const col = colorFor(item);
+    g.fillStyle = col; g.fillRect(0, 0, c.width, c.height);
+    const shade = g.createLinearGradient(0, 0, c.width, 0);
+    shade.addColorStop(0, "rgba(0,0,0,.28)"); shade.addColorStop(.25, "rgba(255,255,255,.08)"); shade.addColorStop(1, "rgba(0,0,0,.3)");
+    g.fillStyle = shade; g.fillRect(0, 0, c.width, c.height);
+    g.fillStyle = "rgba(255,255,255,.55)";
+    if (item.kind === "buku") { g.fillRect(0, c.height * .08, c.width, 3); g.fillRect(0, c.height * .92, c.width, 3); }
+    if (item.kind === "materi") { g.fillStyle = "#f4f1e6"; g.fillRect(c.width * .15, c.height * .06, c.width * .7, c.height * .2); g.fillStyle = "#333"; g.font = `600 ${Math.round(c.width * .22)}px JetBrains Mono, monospace`; g.textAlign = "center"; g.fillText("PDF", c.width / 2, c.height * .18); }
+    if (item.curation) { g.fillStyle = "#f0b54f"; g.beginPath(); g.arc(c.width / 2, c.height * .95 - 4, Math.min(8, c.width * .14), 0, 7); g.fill(); }
+    g.save(); g.translate(c.width / 2, c.height * (item.kind === "materi" ? .6 : .5)); g.rotate(-Math.PI / 2);
+    g.fillStyle = "#fff"; g.textAlign = "center"; g.textBaseline = "middle";
+    const size = Math.min(c.width * .42, 30); g.font = `600 ${size}px "Bricolage Grotesque", system-ui, sans-serif`;
+    let t = item.title; const maxW = c.height * (item.kind === "materi" ? .6 : .78);
+    while (g.measureText(t).width > maxW && t.length > 3) t = t.slice(0, -2);
+    if (t !== item.title) t = t.replace(/\s*\S?$/, "") + "…";
+    g.fillText(t, 0, 0); g.restore();
+    const tex = new THREE.CanvasTexture(c); tex.encoding = THREE.sRGBEncoding; tex.anisotropy = 4; return tex;
+  }
+  function coverTexture(item, d, h) {
+    const c = document.createElement("canvas"); c.width = Math.round(d * 300); c.height = Math.round(h * 300);
+    const g = c.getContext("2d"); const col = colorFor(item);
+    g.fillStyle = col; g.fillRect(0, 0, c.width, c.height);
+    g.fillStyle = "rgba(255,255,255,.12)"; g.fillRect(c.width * .08, c.height * .08, c.width * .84, c.height * .84);
+    g.fillStyle = "#fff"; g.font = `500 ${Math.round(c.width * .05)}px "JetBrains Mono", monospace`;
+    g.fillText(KIND[item.kind].toUpperCase() + " · " + (item.shelf || "").toUpperCase().slice(0, 22), c.width * .13, c.height * .17);
+    g.font = `700 ${Math.round(c.width * .1)}px "Bricolage Grotesque", system-ui, sans-serif`;
+    const words = item.title.split(/\s+/); let line = "", y = c.height * .32; const lh = c.width * .12;
+    for (const w of words) { const t = line ? line + " " + w : w; if (g.measureText(t).width > c.width * .74 && line) { g.fillText(line, c.width * .13, y); y += lh; line = w; } else line = t; if (y > c.height * .7) break; }
+    if (line && y <= c.height * .7) g.fillText(line, c.width * .13, y);
+    g.font = `400 ${Math.round(c.width * .055)}px Literata, Georgia, serif`; g.fillStyle = "rgba(255,255,255,.85)";
+    g.fillText((item.author || "").slice(0, 34), c.width * .13, c.height * .85);
+    const tex = new THREE.CanvasTexture(c); tex.encoding = THREE.sRGBEncoding; tex.anisotropy = 4; return tex;
+  }
+  function dims(item) {
+    const r = (hash(item.title) % 1000) / 1000;
+    if (item.kind === "artikel") return { w: .09 + r * .04, h: 1.45, d: 1.02 };
+    if (item.kind === "materi") return { w: .42, h: 1.75, d: 1.22 };
+    return { w: .2 + r * .22, h: 1.45 + ((hash(item.author || item.title) % 100) / 100) * .45, d: 1.1 + r * .1 };
+  }
+
+  function disposeCase() {
+    if (!caseGroup) return;
+    caseGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); const ms = Array.isArray(o.material) ? o.material : o.material ? [o.material] : []; for (const m of ms) { m.map?.dispose(); m.dispose(); } });
+    scene.remove(caseGroup); caseGroup = null; books = []; rows = [];
+  }
+
+  function build(items) {
+    const keepPulled = pulled?.userData.item.id;
+    disposeCase(); hovered = null; pulled = null; labelEls = [];
+    caseGroup = new THREE.Group(); scene.add(caseGroup);
+    const groups = byShelf(items);
+    const rowH = 2.35, gap = .03, pad = .35;
+    // width of the case = widest shelf
+    let W = 6;
+    for (const [, arr] of groups) W = Math.max(W, arr.reduce((s, it) => s + dims(it).w + gap, 0) + 2 * pad);
+    const wood = new THREE.MeshStandardMaterial({ color: cssVar("--wood") || "#8b6b50", roughness: .85 });
+    const woodMesh = (geo) => { const m = new THREE.Mesh(geo, wood.clone()); m.userData.wood = true; caseGroup.add(m); return m; };
+    const nRows = Math.max(groups.length, 1);
+    const totalH = nRows * rowH;
+    const x0 = -W / 2;
+    // sides, top, back
+    woodMesh(new THREE.BoxGeometry(.16, totalH + .2, 1.6)).position.set(x0 - .08, -totalH / 2 + rowH, 0);
+    woodMesh(new THREE.BoxGeometry(.16, totalH + .2, 1.6)).position.set(-x0 + .08, -totalH / 2 + rowH, 0);
+    woodMesh(new THREE.BoxGeometry(W + .32, .16, 1.6)).position.set(0, rowH + .1, 0);
+    const back = woodMesh(new THREE.BoxGeometry(W + .32, totalH + .2, .06)); back.position.set(0, -totalH / 2 + rowH, -.78); back.userData.wood = false;
+    back.material.color.set(cssVar("--wood") || "#8b6b50").multiplyScalar(.62);
+
+    groups.forEach(([shelf, arr], r) => {
+      const baseY = -r * rowH; // top surface of plank
+      woodMesh(new THREE.BoxGeometry(W, .14, 1.6)).position.set(0, baseY - .07, 0);
+      rows.push({ shelf, count: arr.length, pos: new THREE.Vector3(x0 + .1, baseY - .07, .82) });
+      let x = x0 + pad;
+      for (const it of arr) {
+        const { w, h, d } = dims(it);
+        const col = new THREE.Color(colorFor(it));
+        const pages = new THREE.MeshStandardMaterial({ color: it.kind === "materi" ? 0xe9e6dc : 0xefe8d6, roughness: .95 });
+        const plain = new THREE.MeshStandardMaterial({ color: col, roughness: .7 });
+        const spine = new THREE.MeshStandardMaterial({ map: spineTexture(it, w, h), roughness: .65 });
+        const cover = new THREE.MeshStandardMaterial({ map: coverTexture(it, d, h), roughness: .65 });
+        // face order: +x, -x, +y, -y, +z (spine, faces the room), -z
+        const mats = [plain, cover, pages, pages, spine, pages];
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mats);
+        const lean = it.kind === "artikel" ? 0 : ((hash(it.title) % 7) - 3) * .004;
+        mesh.position.set(x + w / 2, baseY + h / 2, .75 - d / 2);
+        mesh.rotation.z = lean;
+        mesh.userData = { item: it, home: mesh.position.clone(), homeRot: new THREE.Euler(0, 0, lean), base: mats.map((m) => m.color.clone()) };
+        caseGroup.add(mesh); books.push(mesh);
+        x += w + gap;
+      }
+    });
+    bounds = { minX: x0 + 2, maxX: -x0 - 2, minY: -(nRows - 1) * rowH + rowH / 2, maxY: rowH / 2 };
+    if (bounds.minX > bounds.maxX) bounds.minX = bounds.maxX = 0;
+    if (cam.ty > bounds.maxY || cam.ty < bounds.minY - .01) { cam.ty = bounds.maxY; cam.y = cam.ty; }
+    fit(W);
+    applyFilter();
+    if (keepPulled) { const b = books.find((m) => m.userData.item.id === keepPulled); if (b) pull(b, true); }
+  }
+
+  let caseW = 6;
+  function fit(W) {
+    if (W) caseW = W;
+    const rect = host.getBoundingClientRect();
+    const aspect = Math.max(rect.width, 1) / Math.max(rect.height, 1);
+    const half = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+    const fitW = (Math.min(caseW, 9) / 2 + .6) / (half * aspect);
+    const fitH = (2.35 * 1.6) / half;
+    cam.z = Math.max(5.5, Math.min(14, Math.max(fitW, Math.min(fitH, 9))));
+    const visHalfW = half * aspect * cam.z;
+    const spare = caseW / 2 + .6 - visHalfW;
+    bounds.minX = spare > 0 ? -spare : 0; bounds.maxX = spare > 0 ? spare : 0;
+    cam.tx = Math.max(bounds.minX, Math.min(bounds.maxX, cam.tx));
+  }
+
+  function resize() {
+    const r = host.getBoundingClientRect();
+    renderer.setSize(r.width, r.height, false);
+    camera.aspect = Math.max(r.width, 1) / Math.max(r.height, 1); camera.updateProjectionMatrix();
+    fit();
+  }
+
+  function matches(it) {
+    const q = S.q.toLowerCase();
+    if (S.kind && it.kind !== S.kind) return false;
+    if (!q) return true;
+    return [it.title, it.author, it.shelf].some((v) => (v || "").toLowerCase().includes(q));
+  }
+  function applyFilter() {
+    for (const b of books) {
+      const on = matches(b.userData.item);
+      b.material.forEach((m, i) => { m.color.copy(b.userData.base[i]); if (!on) m.color.multiplyScalar(.22); });
+      b.userData.dim = !on;
+    }
+  }
+
+  // ---- animation ----
+  function tween(mesh, pos, rot, dur, next) {
+    mesh.userData.tw = { t0: performance.now(), dur: reduceMotion ? 1 : dur, fp: mesh.position.clone(), tp: pos, fr: mesh.rotation.clone(), tr: rot, next };
+  }
+  const ease = (t) => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  function frontSpot() {
+    const narrow = host.clientWidth < 640;
+    const drawerOffset = narrow ? 0 : Math.min(1.3, 440 / host.clientWidth * 4);
+    return new THREE.Vector3(cam.x - drawerOffset, cam.y + (narrow ? 1.1 : .15), cam.z - 4.8);
+  }
+  function pull(mesh, instant) {
+    if (pulled && pulled !== mesh) putBack(pulled);
+    pulled = mesh;
+    const ud = mesh.userData;
+    const out = ud.home.clone(); out.z += 1.05;
+    const front = frontSpot();
+    const faceRot = new THREE.Euler(-.08, Math.PI / 2 - .35, 0);
+    if (instant) { mesh.position.copy(front); mesh.rotation.copy(faceRot); return; }
+    tween(mesh, out, ud.homeRot.clone(), 260, () => tween(mesh, front, faceRot, 620));
+  }
+  function putBack(mesh) {
+    const ud = mesh.userData; const out = ud.home.clone(); out.z += 1.05;
+    tween(mesh, out, ud.homeRot.clone(), 480, () => tween(mesh, ud.home.clone(), ud.homeRot.clone(), 260));
+    if (pulled === mesh) pulled = null;
+  }
+  function release() { if (pulled) putBack(pulled); }
+
+  // ---- input ----
+  const ray = new THREE.Raycaster(); const ndc = new THREE.Vector2();
+  function pick(ev) {
+    const r = renderer.domElement.getBoundingClientRect();
+    ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+    const hit = ray.intersectObjects(books, false)[0];
+    return hit ? hit.object : null;
+  }
+  let down = null;
+  const cv = renderer.domElement;
+  cv.addEventListener("pointerdown", (e) => { down = { x: e.clientX, y: e.clientY, tx: cam.tx, ty: cam.ty, drag: false }; cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener("pointermove", (e) => {
+    if (down) {
+      const dx = e.clientX - down.x, dy = e.clientY - down.y;
+      if (!down.drag && Math.hypot(dx, dy) > 6) down.drag = true;
+      if (down.drag) {
+        const k = (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * cam.z) / host.clientHeight;
+        cam.tx = Math.max(bounds.minX, Math.min(bounds.maxX, down.tx - dx * k));
+        cam.ty = Math.max(bounds.minY, Math.min(bounds.maxY, down.ty + dy * k));
+        setHover(null); return;
+      }
+    }
+    if (e.pointerType === "mouse") setHover(pick(e), e);
+  });
+  cv.addEventListener("pointerup", (e) => {
+    const wasDrag = down?.drag; down = null;
+    if (wasDrag) return;
+    const b = pick(e);
+    if (b && !b.userData.dim) { if (b === pulled) return; onPick?.(b.userData.item.id); }
+    else if (!b && pulled) onPick?.(null);
+  });
+  cv.addEventListener("pointerleave", () => setHover(null));
+  cv.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const k = .006 * cam.z / 9;
+    cam.ty = Math.max(bounds.minY, Math.min(bounds.maxY, cam.ty - e.deltaY * k));
+    cam.tx = Math.max(bounds.minX, Math.min(bounds.maxX, cam.tx + e.deltaX * k));
+  }, { passive: false });
+
+  const tip = $("tip");
+  function setHover(b, e) {
+    if (b && b.userData.dim) b = null;
+    hovered = b === pulled ? null : b;
+    cv.classList.toggle("hovering", !!hovered);
+    if (hovered && e) {
+      const r = host.getBoundingClientRect();
+      tip.hidden = false; tip.textContent = hovered.userData.item.title;
+      tip.style.left = (e.clientX - r.left) + "px"; tip.style.top = (e.clientY - r.top) + "px";
+    } else tip.hidden = true;
+  }
+
+  // ---- loop ----
+  const labelsEl = $("labels"); let labelEls = [];
+  function drawLabels() {
+    if (labelEls.length !== rows.length) {
+      labelsEl.innerHTML = rows.map((r) => `<div class="shelf-label">${esc(r.shelf)}<b>${r.count}</b></div>`).join("");
+      labelEls = [...labelsEl.children];
+    }
+    const w = host.clientWidth, h = host.clientHeight;
+    rows.forEach((r, i) => {
+      const v = r.pos.clone().project(camera); const el = labelEls[i];
+      if (!el) return;
+      const x = Math.max(8, (v.x + 1) / 2 * w), y = (1 - v.y) / 2 * h;
+      el.style.left = x + "px"; el.style.top = y + "px"; el.style.display = pulled || y < -20 || y > h + 20 ? "none" : "";
+    });
+  }
+  let onPick = null;
+  function frame(now) {
+    requestAnimationFrame(frame);
+    if (!caseGroup || $("scene").hidden) return;
+    const k = reduceMotion ? 1 : .14;
+    cam.x += (cam.tx - cam.x) * k; cam.y += (cam.ty - cam.y) * k;
+    camera.position.set(cam.x, cam.y + .25, cam.z); camera.lookAt(cam.x, cam.y, 0);
+    for (const b of books) {
+      const ud = b.userData;
+      if (ud.tw) {
+        const t = Math.min(1, (now - ud.tw.t0) / ud.tw.dur), e = ease(t);
+        b.position.lerpVectors(ud.tw.fp, ud.tw.tp, e);
+        b.rotation.set(ud.tw.fr.x + (ud.tw.tr.x - ud.tw.fr.x) * e, ud.tw.fr.y + (ud.tw.tr.y - ud.tw.fr.y) * e, ud.tw.fr.z + (ud.tw.tr.z - ud.tw.fr.z) * e);
+        if (t >= 1) { const n = ud.tw.next; ud.tw = null; n?.(); }
+      } else if (b === pulled) {
+        const f = frontSpot(); b.position.lerp(f, .2);
+        b.rotation.y = Math.PI / 2 - .35 + (reduceMotion ? 0 : Math.sin(now / 1400) * .05);
+      } else {
+        const tz = ud.home.z + (b === hovered ? .28 : 0);
+        b.position.z += (tz - b.position.z) * (reduceMotion ? 1 : .2);
+      }
+    }
+    drawLabels();
+    renderer.render(scene, camera);
+  }
+
+  new ResizeObserver(resize).observe(host);
+  resize(); applyTheme(); requestAnimationFrame(frame);
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
+  new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  return {
+    build, applyFilter, release, resize,
+    onPick(fn) { onPick = fn; },
+    select(id) { const b = books.find((m) => m.userData.item.id === id); if (b) { cam.ty = Math.max(bounds.minY, Math.min(bounds.maxY, b.userData.home.y - .2)); pull(b); } },
+  };
+})();
+
+// =====================================================================
+// UI
+// =====================================================================
+function setNote(t) { $("modeNote").textContent = t; }
+function current() { return S.items.find((x) => x.id === S.selected) || null; }
+
+function setView(v) {
+  S.view = v; lsSet("rakbuku.view", v);
+  $("vRak").setAttribute("aria-pressed", v === "rak"); $("vList").setAttribute("aria-pressed", v === "list");
+  $("list").hidden = v !== "list";
+  for (const id of ["scene", "labels", "hint"]) $(id).hidden = v !== "rak";
+  if (v === "rak") { scene3.resize(); if (S.selected) scene3.select(S.selected); }
+  renderEmpty(); renderList();
+}
+function renderEmpty() { $("empty").hidden = !(S.loaded && S.items.length === 0); }
+
+function renderList() {
+  if (S.view !== "list") return;
+  const q = S.q.toLowerCase();
+  const shown = S.items.filter((it) => (!S.kind || it.kind === S.kind) && (!q || [it.title, it.author, it.shelf].some((v) => (v || "").toLowerCase().includes(q))));
+  const groups = byShelf(shown);
+  $("listInner").innerHTML = groups.length ? groups.map(([shelf, arr]) => `
+    <section class="group">
+      <h3>${esc(shelf)} <span>${arr.length} item</span></h3>
+      <div class="rows">${arr.map((it) => `
+        <button class="row" data-id="${esc(it.id)}">
+          <span class="swatch" style="background:${colorFor(it)}"></span>
+          <span class="row-main"><div class="row-title">${esc(it.title)}</div><div class="row-sub">${esc(it.author || it.url || it.pdfName || "")}</div></span>
+          <span class="chips">${it.contoh ? '<span class="chip">contoh</span>' : ""}${it.curation ? '<span class="chip ai">terkurasi</span>' : ""}<span class="chip">${KIND[it.kind]}</span><span class="chip st-${it.status}">${STATUS[it.status] || ""}</span></span>
+        </button>`).join("")}</div>
+    </section>`).join("") : (S.items.length ? `<p class="meta">Tidak ada yang cocok dengan pencarian ini.</p>` : "");
+}
+
+function openItem(id) {
+  S.selected = id; S.tab = "ringkasan"; S.card = 0; S.flipped = false; S.confirmDelete = false; S.busy = null;
+  if (id && S.view === "rak") scene3.select(id);
+  renderDrawer();
+}
+function closeItem() { S.selected = null; scene3.release(); renderDrawer(); }
+
+function renderDrawer() {
+  const el = $("drawer"); const it = current();
+  if (!it) { el.hidden = true; return; }
+  el.hidden = false;
+  const shelves = [...new Set(S.items.map((x) => x.shelf))];
+  el.innerHTML = `
+    <div class="drawer-head">
+      <span class="chips" style="justify-content:flex-start"><span class="chip">${KIND[it.kind]}</span>${it.contoh ? '<span class="chip">contoh</span>' : ""}</span>
+      <button class="x" id="dClose" aria-label="Tutup">×</button>
+    </div>
+    <div class="drawer-body">
+      <div>
+        <h2>${esc(it.title)}</h2>
+        <p class="meta">${esc([it.author, it.pdfName].filter(Boolean).join(" · "))}</p>
+        ${it.url ? `<p class="meta"><a class="link" href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.url)}</a></p>` : ""}
+      </div>
+      <div class="fields">
+        <label class="f">Status
+          <select id="dStatus">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${it.status === k ? "selected" : ""}>${v}</option>`).join("")}</select>
+        </label>
+        <label class="f">Rak<input id="dShelf" list="shelfList" value="${esc(it.shelf)}"></label>
+      </div>
+      ${curationHtml(it)}
+      <div>
+        ${S.confirmDelete
+          ? `<div class="confirm">Hapus “${esc(it.title)}” dari rak? <button class="btn danger" id="dDelYes">Ya, hapus</button><button class="btn ghost" id="dDelNo">Batal</button></div>`
+          : `<button class="btn ghost danger" id="dDel">Hapus dari rak</button>`}
+      </div>
+    </div>`;
+  $("shelfList").innerHTML = shelves.map((s) => `<option value="${esc(s)}">`).join("");
+  wireDrawer(it);
+}
+
+function curationHtml(it) {
+  const c = it.curation;
+  const busy = S.busy ? `<p class="status-line${S.busy.err ? " err" : ""}">${esc(S.busy.msg)}</p>` : "";
+  const working = S.busy && !S.busy.err;
+  const keyNeeded = !ai.sample;
+  const keyBox = keyNeeded ? `
+      <label class="f">Kunci API Claude (disimpan hanya di browser ini)<input id="apiKey" type="password" placeholder="sk-ant-…" value="${esc(lsGet("rakbuku.apikey", ""))}"></label>` : "";
+  const sourceBox = `
+    <div class="source">
+      ${it.sumber
+        ? `<p>Sumber tersimpan: ${esc(it.pdfName || "teks tempelan")} (${it.sumber.length.toLocaleString("id-ID")} karakter).</p>
+           <div class="chips" style="justify-content:flex-start"><button class="btn primary" id="cRun" ${working ? "disabled" : ""}>${c ? "Kurasi ulang" : "Kurasi dengan Claude"}</button><button class="btn ghost" id="cSwap" ${working ? "disabled" : ""}>Ganti sumber</button></div>`
+        : `<p>${it.kind === "materi" ? "Unggah PDF materi" : "Unggah PDF atau tempel teks"}, lalu Claude menyusun ringkasan, poin kunci, istilah, dan flashcard.</p>
+           <label class="f">PDF<input id="cPdf" type="file" accept="application/pdf,.pdf" ${working ? "disabled" : ""}></label>
+           <label class="f">atau tempel teks<textarea id="cText" rows="4" placeholder="Tempel isi artikel atau catatan kuliah di sini" ${working ? "disabled" : ""}></textarea></label>
+           <div><button class="btn primary" id="cRun" ${working ? "disabled" : ""}>Kurasi dengan Claude</button></div>`}
+      ${keyBox}
+      ${busy}
+    </div>`;
+  if (!c) return `<section class="cur"><div class="cur-head"><strong>Kurasi</strong></div>${sourceBox}</section>`;
+  const tabs = [["ringkasan", "Ringkasan"], ["poin", "Poin kunci"], ["istilah", "Istilah"], ["kartu", `Flashcard (${c.kartu.length})`], ["sumber", "Sumber"]];
+  let pane = "";
+  if (S.tab === "ringkasan") pane = `<p>${esc(c.ringkasan)}</p>`;
+  if (S.tab === "poin") pane = `<ul>${c.poin.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>`;
+  if (S.tab === "istilah") pane = c.istilah.length ? `<dl class="terms">${c.istilah.map((t) => `<div><dt>${esc(t.istilah)}</dt><dd>${esc(t.arti)}</dd></div>`).join("")}</dl>` : `<p class="meta">Tidak ada istilah.</p>`;
+  if (S.tab === "kartu") {
+    const k = c.kartu[S.card] || { tanya: "—", jawab: "—" };
+    pane = `<button class="card${S.flipped ? " flipped" : ""}" id="card" aria-label="Balik kartu"><div class="card-in">
+        <div class="face front"><small>Pertanyaan</small>${esc(k.tanya)}</div>
+        <div class="face back"><small>Jawaban</small>${esc(k.jawab)}</div></div></button>
+      <div class="card-nav"><button class="btn ghost" id="cPrev" aria-label="Kartu sebelumnya" ${S.card === 0 ? "disabled" : ""}>←</button><span>${S.card + 1} / ${c.kartu.length} · ketuk untuk membalik</span><button class="btn ghost" id="cNext" aria-label="Kartu berikutnya" ${S.card >= c.kartu.length - 1 ? "disabled" : ""}>→</button></div>`;
+  }
+  return `<section class="cur">
+    <div class="cur-head"><strong>Kurasi</strong><span class="status-line">${new Date(c.dibuat).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</span></div>
+    <div class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${S.tab === k}">${l}</button>`).join("")}</div>
+    ${S.tab === "sumber" ? sourceBox : `<div class="tabpane">${pane}</div>`}
+  </section>`;
+}
+
+function wireDrawer(it) {
+  $("dClose").onclick = closeItem;
+  $("dStatus").onchange = (e) => store.update(it.id, { status: e.target.value });
+  $("dShelf").onchange = (e) => { const v = e.target.value.trim(); if (v) store.update(it.id, { shelf: v }); };
+  if ($("dDel")) $("dDel").onclick = () => { S.confirmDelete = true; renderDrawer(); };
+  if ($("dDelNo")) $("dDelNo").onclick = () => { S.confirmDelete = false; renderDrawer(); };
+  if ($("dDelYes")) $("dDelYes").onclick = async () => { const id = it.id; S.selected = null; scene3.release(); renderDrawer(); await store.remove(id); };
+  document.querySelectorAll("#drawer [data-tab]").forEach((b) => b.onclick = () => { S.tab = b.dataset.tab; S.flipped = false; renderDrawer(); });
+  if ($("card")) $("card").onclick = () => { S.flipped = !S.flipped; $("card").classList.toggle("flipped", S.flipped); };
+  if ($("cPrev")) $("cPrev").onclick = () => { S.card--; S.flipped = false; renderDrawer(); };
+  if ($("cNext")) $("cNext").onclick = () => { S.card++; S.flipped = false; renderDrawer(); };
+  if ($("apiKey")) $("apiKey").onchange = (e) => lsSet("rakbuku.apikey", e.target.value.trim());
+  if ($("cSwap")) $("cSwap").onclick = () => store.update(it.id, { sumber: null });
+  if ($("cRun")) $("cRun").onclick = () => runCuration(it.id);
+}
+
+async function runCuration(id) {
+  const it = S.items.find((x) => x.id === id); if (!it) return;
+  const busy = (msg, err) => { S.busy = { msg, err }; if (S.selected === id) renderDrawer(); };
+  try {
+    let text = it.sumber, patch = {};
+    if (!text) {
+      const file = $("cPdf")?.files?.[0]; const pasted = $("cText")?.value.trim();
+      if (file) {
+        busy("Memuat pembaca PDF…");
+        const r = await pdfToText(file, (p, n) => busy(`Membaca PDF… halaman ${p} dari ${n}`));
+        text = r.text; patch = { sumber: text, pdfName: file.name };
+      } else if (pasted) { text = pasted.slice(0, MAX_SOURCE_CHARS); patch = { sumber: text }; }
+      else return busy("Pilih file PDF atau tempel teks dulu.", true);
+    }
+    if (!ai.ready) { if (Object.keys(patch).length) await store.update(id, patch); return busy("Masukkan kunci API Claude di atas, lalu tekan Kurasi lagi.", true); }
+    busy("Claude sedang membaca dan menyusun kurasi… (biasanya 20–60 detik)");
+    const curation = await ai.curate(it, text);
+    await store.update(id, { ...patch, curation });
+    S.busy = null; S.tab = "ringkasan"; S.card = 0;
+    if (S.selected === id) renderDrawer();
+  } catch (e) {
+    const code = e?.code;
+    busy(code === "rate_limited" ? "Batas pemakaian Claude tercapai. Coba lagi beberapa saat lagi." : code === "not_granted" ? "Izin memakai Claude ditolak untuk halaman ini." : (e?.message || String(e)), true);
+  }
+}
+
+// ---------- add dialog ----------
+let addKind = "buku";
+function openAdd() {
+  $("addForm").reset(); $("addStatus").textContent = ""; setKind(S.kind || "buku");
+  $("shelfList").innerHTML = [...new Set(S.items.map((x) => x.shelf))].map((s) => `<option value="${esc(s)}">`).join("");
+  $("modal").hidden = false; $("aTitle").focus();
+}
+function setKind(k) {
+  addKind = k;
+  document.querySelectorAll(".kinds button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.kind === k));
+  $("urlField").hidden = k !== "artikel"; $("pdfField").hidden = k !== "materi";
+  $("aAuthor").placeholder = k === "buku" ? "mis. James Stewart" : k === "artikel" ? "mis. Kompas.id" : "mis. Slide dosen";
+}
+document.querySelectorAll(".kinds button").forEach((b) => b.onclick = () => setKind(b.dataset.kind));
+$("aPdf").onchange = (e) => { const f = e.target.files[0]; if (f && !$("aTitle").value) $("aTitle").value = f.name.replace(/\.pdf$/i, "").replace(/[_-]+/g, " "); };
+$("aUrl").onchange = (e) => { try { const u = new URL(e.target.value); if (!$("aAuthor").value) $("aAuthor").value = u.hostname.replace(/^www\./, ""); } catch {} };
+$("addCancel").onclick = () => { $("modal").hidden = true; };
+$("modal").addEventListener("click", (e) => { if (e.target === $("modal")) $("modal").hidden = true; });
+$("addForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const data = { kind: addKind, title: $("aTitle").value.trim(), author: $("aAuthor").value.trim(), shelf: $("aShelf").value.trim(), status: $("aStatus").value };
+  if (!data.title || !data.shelf) return;
+  if (addKind === "artikel" && $("aUrl").value.trim()) data.url = $("aUrl").value.trim();
+  const file = addKind === "materi" ? $("aPdf").files[0] : null;
+  $("addSubmit").disabled = true;
+  try {
+    if (file) {
+      $("addStatus").textContent = "Membaca PDF…";
+      const r = await pdfToText(file, (p, n) => $("addStatus").textContent = `Membaca PDF… halaman ${p} dari ${n}`);
+      data.sumber = r.text; data.pdfName = file.name;
+    }
+    S.pendingOpen = "?";
+    const id = await store.add(data);
+    $("modal").hidden = true;
+    if (S.items.some((x) => x.id === id)) { S.pendingOpen = null; openItem(id); } else S.pendingOpen = id;
+  } catch (err) {
+    $("addStatus").textContent = err?.message || String(err);
+  } finally { $("addSubmit").disabled = false; }
+});
+
+// ---------- wiring ----------
+$("vRak").onclick = () => setView("rak");
+$("vList").onclick = () => setView("list");
+$("addBtn").onclick = openAdd; $("emptyAdd").onclick = openAdd;
+$("q").addEventListener("input", (e) => { S.q = e.target.value; scene3.applyFilter(); renderList(); });
+$("fKind").onchange = (e) => { S.kind = e.target.value; scene3.applyFilter(); renderList(); };
+$("listInner").addEventListener("click", (e) => { const r = e.target.closest(".row"); if (r) openItem(r.dataset.id); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { if (!$("modal").hidden) $("modal").hidden = true; else if (S.selected) closeItem(); } });
+scene3.onPick((id) => id ? openItem(id) : closeItem());
+
+function onItems(items) {
+  S.items = items; S.loaded = true;
+  if (S.selected && !current()) S.selected = null;
+  scene3.build(items);
+  renderEmpty(); renderList();
+  if (S.pendingOpen && S.pendingOpen !== "?" && items.some((x) => x.id === S.pendingOpen)) { const id = S.pendingOpen; S.pendingOpen = null; openItem(id); }
+  else renderDrawer();
+}
+
+setView(S.view);
+(async () => {
+  await Promise.all([store.init(onItems), ai.init()]);
+  const n = S.items.length;
+  setNote(store.mode === "db" ? "tersimpan di akunmu" : "tersimpan di browser ini");
+})();
+})();
+</script>
